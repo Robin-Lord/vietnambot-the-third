@@ -1,31 +1,5 @@
 #|||||||||||||||||||||||||||||||||||||||||||||||||||||||#
 #
-#--- Notes ---#
-#
-#
-
-
-
-# 7 need to add "starting" print to all worker functions
-# 9 need to copy database requirements block from initiate_database process to here
-# 10 need to cut down initiate_database.py to just processes which are necessary and correct
-# 16 Need to add in query and fulfillment columns to database through creation module, and set relevant value in this process
-# 17 Need to add link to Moz blog post to Create API.AI step
-# 18 Fill out lists of processes and definitions
-
-
-
-# Slack token and challenge management resource: https://github.com/slackapi/Slack-Python-Onboarding-Tutorial
-# Celery on Heroku resources (have used latter over the former here): to https://blog.miguelgrinberg.com/post/using-celery-with-flask and https://devcenter.heroku.com/articles/celery-heroku
-
-#
-#
-#--- End of notes ---#
-#
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
-
-#|||||||||||||||||||||||||||||||||||||||||||||||||||||||#
-#
 #--- Steps to take before implementing this code ---#
 
 # 1 Create an API.AI account and build your conversation

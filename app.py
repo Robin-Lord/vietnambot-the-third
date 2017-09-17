@@ -63,6 +63,12 @@
 #         Deduplication section      #
 #====================================#
 
+# Slack is quite prone to sending event notifications more than once, particularly
+# if our application takes a little while longer to respond. One solution is to
+# pay money for faster processing, another is to move the response up as high as possible
+# in the code so we respond as quickly as possible, a third is to run through some Deduplication
+# when we get these messages and discount the repeated calls.
+
 # The risk here is that the user might legitimately send us two identical responses
 # within two minutes, perhaps, for example, if they are responding to a few messages with "yes"
 # one solution is to remove this block and make our app respond to Slack faster to avoid it sending
@@ -73,6 +79,19 @@
 # duplicate response by using buttons in Slack. Some chat bots use buttons to help control the full conversational
 # flow but relying purely on buttons does devolve the conversation into essentially a pretty linear website journey
 
+
+#====================================#
+#                 Tokens             #
+#====================================#
+
+# This program uses a combination of user tokens and bot tokens, user tokens give us permission to post wherever that user can
+# bot tokens give us permission to post wherever that bot has been allowed. In this application that difference in freedom
+# to roam doesn't particularly change the functionality but it does allow us to show how we'd deal with each.
+
+
+#====================================#
+#                 Celery             #
+#====================================#
 
 # Celery on Heroku resources (the former is a good resource for understanding but clashes with our database so this
 # program implements the latter): https://blog.miguelgrinberg.com/post/using-celery-with-flask

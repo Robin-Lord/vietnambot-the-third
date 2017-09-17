@@ -1,9 +1,203 @@
 #|||||||||||||||||||||||||||||||||||||||||||||||||||||||#
 #
+#--- Notes ---#
+#
+#
+
+
+#====================================#
+# Database close and open statements #
+#====================================#
+
+# The Database closed and opened comments are for easy identification of when we can
+# access the database and to ensure we're properly closing connections
+# after opening them. Sometimes they are at the far left, sometimes they are indented
+# when they are indented it is because they have been closed or opened within an "if" meaning
+# that code in other if statements is not affected. At the points where the database is closed
+# or opened for every eventuality, the open or closed statement is pushed to the far left
+# messages about whether the database is open or closed are also included within the functions
+# but they rely on those connections being set up before the functions are called so if you change
+# something and that breaks, that could be the cause
+
+#====================================#
+#     App code and location code     #
+#====================================#
+
+# Wherever you see this, even if it is in a function, it is only needed to help us keep track
+# of what is going on in print statements. I've added it in as a variable so that each time
+# we start a new process we change the location code. If two different parts of code call exactly
+# the fame function we'll know if one of them is causing an error or whether it is the function itself
+# because the print statement will help us keep track of where the information is coming from
+
+
+#====================================#
+#              Functions             #
+#====================================#
+
+# Anything of the format "bunch_of_words(thing_1, thing_2, thing_3, etc.)" is a function
+# to execute them, you just write them out and replace thing_1 etc. with the information you want
+# them to use, to create them you write "def" then write out the function using placeholders for the data
+# wherever you find a function in this code and don't know what it does, scroll to the synchronous functions
+# section at the bottom where it will be explained
+
+
+#====================================#
+#               return               #
+#====================================#
+
+# When we write "return" that's the end of the process, if you haven't got that, the code will keep
+# going down the list, if it is within an "if" condition it'll jump out of the if and keep running unless
+# there is no more code that it meets the conditions for
+
+
+#====================================#
+#               Contexts             #
+#====================================#
+
+# Don't confuse the contexts we RECEIVE from API.AI with the contexts we SEND to API.AI
+
+# Slack token and challenge management resource: https://github.com/slackapi/Slack-Python-Onboarding-Tutorial
+
+
+#====================================#
+#         Deduplication section      #
+#====================================#
+
+# The risk here is that the user might legitimately send us two identical responses
+# within two minutes, perhaps, for example, if they are responding to a few messages with "yes"
+# one solution is to remove this block and make our app respond to Slack faster to avoid it sending
+# the messages again (this could be done by paying for it to be constantly live, or by misusing a
+# free uptime checker to ping our app every half hour or so to keep it awake). The solution here is to
+# carefully manage the amount of time we're ignoring (two minutes should hopefully cover Slack resent
+# responses without discounting many repeated messages) and to control the times when users might send a
+# duplicate response by using buttons in Slack. Some chat bots use buttons to help control the full conversational
+# flow but relying purely on buttons does devolve the conversation into essentially a pretty linear website journey
+
+
+# Celery on Heroku resources (the former is a good resource for understanding but clashes with our database so this
+# program implements the latter): https://blog.miguelgrinberg.com/post/using-celery-with-flask
+# and https://devcenter.heroku.com/articles/celery-heroku
+
+#
+#
+#--- End of notes ---#
+#
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+
+#|||||||||||||||||||||||||||||||||||||||||||||||||||||||#
+#
 #--- Steps to take before implementing this code ---#
 
 # 1 Create an API.AI account and build your conversation
-    # The important parts here are the intents which need to include phrases and actions, I give details of the variables I use in my Moz post
+    # The important parts here are the intents which need to include phrases and actions
+    # food:
+        # User says: I want [food] (etc.)
+        # In context: None
+        # Out context: food-followup
+        # Action: food
+        # Event: None
+        # Response (this is overwritten in our code but could also be created through API.AI): Ok [food] for [username], got it, I'll add that and let you know when we're done
+
+    # food-fallback (we've called this food fallback because it would usually be food however we don't process it as food to be safe)
+        # User says: whatever the heck they want
+        # In context: None
+        # Out context: None
+        # Action: food-fallback
+        # Event: None
+        # Response: I'm sorry, I don't have a huge number of functions so I can't understand very many inputs, try saying "I want" and then whatever food you'd like to order
+
+    # no-name
+        # User says: nothing, we trigger this by sending an Event
+        # In context: None
+        # Out context: food-followup, no-name
+        # Action: None
+        # Event: food-no-name
+        # Response: It looks as though you haven't ordered with Nambot before, what name should I use?
+
+    # name-is
+        # User says: "my name is [name]"
+        # In context: no-name, food-followup
+        # Out context: food-followup, name-is
+        # Action: name-is
+        # Event: None
+        # Response: (this is overwritten in our code but could also be created through API.AI): Ok [food] for [username], got it, I'll add that and let you know when we're done
+
+    # name-fallback
+        # User says: whatever the heck they want
+        # In context: no-name, food-followup
+        # Out context: name-fallback, food-followup
+        # Action: name-fallback
+        # Event: None
+        # Response: (this is overwritten in our code) I think you're asking for me to set your name as [whatever the heck they want], is that right?
+
+    #================================================================================
+    # Add the following by clicking on the name-fallback intent and selecting "yes"
+    #================================================================================
+
+    # name-confirmation
+        # User says: yes (or similar, this is generated by API.AI)
+        # In context: name-fallback, food-followup, potential-name (we set this last one through a POST request to API.AI)
+        # Out context: food-followup
+        # Action: name-confirmation
+        # Event: None
+        # Response: (this is overwritten in our code but could also be created through API.AI): Ok [food] for [username], got it, I'll add that and let you know when we're done
+
+    # more-details
+        # User says: give me more info
+        # In context: order-list
+        # Out context:
+        # Action: give-deets
+        # Event: None
+        # Response: (this is overwritten in our code but could also be created through API.AI): Ok I'll get those for you
+
+
+    #================================================================================
+    # Add the following by clicking on the name-fallback intent and selecting "no"
+    #================================================================================
+
+
+    # name-incorrect
+        # User says: no (or similar)
+        # In context: name-fallback, food-followup, potential-name (we set this last one through a POST request to API.AI)
+        # Out context: food-followup, no-name
+        # Action: name-incorrect
+        # Event: None
+        # Response: Oh, sorry about getting your name wrong there, could you let me know your name by saying "My name is" and then writing your name
+
+    # no-details
+        # User says: no more info
+        # In context: order-list
+        # Out context:
+        # Action: no-deets
+        # Event: None
+        # Response: (this is overwritten in our code but could also be created through API.AI): Ok you can order at https://caphehouse.orderswift.com/ and the sheet at [sheet location]
+
+
+    #================================================================================
+    # Add the following as normal
+    #================================================================================
+
+
+
+
+    # messing-about
+        # User says: " 'My name is' and then writing your name"
+        # In context: no-name, food-followup
+        # Out context: no-name, food-followup
+        # Action: messing-about
+        # Event: None
+        # Response: Haha, very funny, do just tell me your name and we'll continue
+
+    # help:
+        # User says: "Help" (etc. you'll need to write this out yourself)
+        # In context: None
+        # Out context: None
+        # Action: Help
+        # Event: None
+        # Response: Hi, I'm Vietnam bot, I can place your Vietnamese order in the shared Google sheet. Just say "I want " and then the food you want
+
+
+
 
 
 # 2 Create Heroku app: https://devcenter.heroku.com/articles/git
@@ -29,10 +223,10 @@
 
 # 2  Receive Slack challenge, respond (this allows the bot to receive notifications from Slack)
 
-# 3  Receive message posted in either private Slack channel or a public channel which the bot has been added to, check to ensure the message is not a repeated message by checking that it is not exactly the same as the last message while being within ten minutes of the last message
+# 3  Receive message posted in either private Slack channel or a public channel which the bot has been added to, check to ensure the message is not a repeated message by checking that it is not exactly the same as the last message while being within two minutes of the last message
 #    (this is to account for the fact that users might send the same message time after time if they want the same order)
 
-# 4  Check that message doesn't have a bot id - suggesting that it was sent by a bot (perhaps nambot) this is to avoid the program responding to itself
+# 4  Check that message doesn't have a bot id - suggesting that it was sent by a bot (perhaps vietnambot) this is to avoid the program responding to itself
 
 # 5  Whether the message is genuine, a repeat or a bot message, respond semi-immediately to prevent Slack resending the event notifications
 
@@ -85,7 +279,6 @@
         # 4 If you are using the optional slot filling, API.AI can NOT receive both the initial request AND the response to its slot filling request from the same place. This isn't a problem most of the time, if you are manually sending a request to API.AI you should do the processing before or after and avoid the slot filling option if possible)
         # 5 If your process is slower than the five second window you cannot use API.AI with platforms like Google Home because you HAVE to use the slot filling option in that case. This tight window and inability to push messages to spoken platforms is quite standard to avoid a confusing or invasive user experience (also applies to Alexa)
         # 6 Excellent platform but support team are slow to respond/ sometimes don't respond at all
-
 
 
 # 2 Slack - messaging platform (https://slack.com/)
@@ -149,19 +342,6 @@
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 
 
-
-#|||||||||||||||||||||||||||||||||||||||||||||||||||||||#
-#
-#--- List of processes and definitions ---#
-
-
-
-
-#--- End of list of processes and definitions ---#
-#
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
-
-
 #|||||||||||||||||||||||||||||||||||||||||||||||||||||||#
 #
 #--- Imports ---#
@@ -218,6 +398,9 @@ app = Flask(__name__)
 #
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 
+#===========================================================================================================================#
+#---------------------------------------------------------------------------------------------------------------------------#
+#===========================================================================================================================#
 
 #|||||||||||||||||||||||||||||||||||||||||||||||||||||||#
 #
@@ -226,7 +409,7 @@ app = Flask(__name__)
 # It allows us to make sure that our asynchronous worker process
 # is receiving commands correctly
 
-tasks.add(1, 2)
+tasks.add("startup", " testing task ",1, 2)
 
 #--- End of confirming asynchronous process is working ---#
 #
@@ -249,6 +432,11 @@ tasks.add(1, 2)
 # instructions for how to create environment variables in Heroku are at (https://devcenter.heroku.com/articles/config-vars)
 client_id = os.environ["SLACK_CLIENT_ID"]
 client_secret = os.environ["SLACK_CLIENT_SECRET"]
+
+# Slack verification token is the unique token that Slack provides in the
+# Basic Information section in the Slack app management portal (https://api.slack.com/apps/A6GN5QC8G/general)
+# You use it for interactive messages to confirm that the message is coming from Slack
+slack_verification_token=os.environ["SLACK_VERIFICATION_TOKEN"]
 #
 #-#
 
@@ -274,6 +462,9 @@ db = SQLAlchemy(app)
 #
 #--- 1 Start application ---#
 
+# I put this big block here because it allows us to easily identify the time when we last uploaded our code. Quite often when
+# something isn't working Slack sends multiple requests so it can take a while to find the actual start, this speeds up
+# that process
 print ("""
 #===========================================================================================================================#
 #---------------------------------------------------------------------------------------------------------------------------#
@@ -394,6 +585,12 @@ def webhook():
         # Getting the information from the 'Post' request, whatever it may be
         post_request = request.get_json(silent=True, force=True)
 
+        if not post_request:
+            # If we can't unpack the post request like this then there's a good chance it is
+            # an interactive message from Slack so we just need to handle it differently
+            button_message(app_code,location_code,request)
+            return make_response("", 200)
+
         #Printing the value of the post request for debugging
         print (app_code,location_code," got json")
         print (app_code,location_code,"post_request: ", post_request)
@@ -503,7 +700,7 @@ def webhook():
                 #
                 #--- 4.1.2 check to make sure the message we received isn't a duplicate of the last  ---#
 
-                # Finding out whether the current query is within ten minutes of the last one
+                # Finding out whether the current query is within two minutes of the last one
                 # (thanks to https://stackoverflow.com/questions/6205442/python-how-to-find-datetime-10-mins-after-current-time
                 # and https://stackoverflow.com/questions/10048249/how-do-i-determine-if-current-time-is-within-a-specified-range-using-pythons-da
 
@@ -525,35 +722,35 @@ def webhook():
                 most_recent_action=check_database(app_code,location_code,user_id, 'most_recent_action_for_user')
                 last_query_time=check_database(app_code,location_code,user_id, 'most_recent_query_time')
 
-
+                print (app_code,location_code,user_id," most recent query is ", most_recent_query)
 
                 # Retrieving the time it is now, then calculating what time
-                # it would have been ten minutes ago
+                # it would have been two minutes ago
                 now = datetime.now()
                 print (app_code,location_code," now is ", now)
 
-                ten_minutes_ago=datetime.now()-timedelta(minutes=5)
-                print (app_code,location_code," ten minutes ago is: ", ten_minutes_ago)
+                two_minutes_ago=datetime.now()-timedelta(minutes=1)
+                print (app_code,location_code," two minutes ago is: ", two_minutes_ago)
 
-                # Catching error for if the user hasn't used the nambot
+                # Catching error for if the user hasn't used the vietnambot
                 # in which case the last_query_time wouldn't exist
                 if last_query_time==None:
                     print (app_code,location_code," first query or unable to call last query time")
                 else:
-                    # Checking whether more than ten minutes have
+                    # Checking whether more than two minutes have
                     # passed since the last query
-                    if ten_minutes_ago < last_query_time:
-                        # If less than ten minutes have passed since
+                    if two_minutes_ago < last_query_time:
+                        # If less than two minutes have passed since
                         # last query it's more likely to be duplicate
-                        print (app_code,location_code," less than ten minutes since last recorded action")
+                        print (app_code,location_code," less than two minutes since last recorded action")
                         within_last_query_window='yes'
                     else:
-                        # If more than ten minutes have passed we're
+                        # If more than two minutes have passed we're
                         # assuming it's not a repeated send from Slack
                         # this allows a user to place exactly the same
                         # order without having to worry about varying
                         # their wording
-                        print (app_code,location_code," more than ten minutes since last recorded action")
+                        print (app_code,location_code," more than two minutes since last recorded action")
 
 
                 print (app_code,location_code,"updating columns")
@@ -561,12 +758,39 @@ def webhook():
                 # in our database, so we can read it next time
                 update_columns(app_code,location_code,['most_recent_query_time',now], user_id)
 
-                if query==most_recent_query:
-                    # If the current query is identical to the last query
-                    # then it's a sign that we've had a repeated request
-                    # from Slack
-                    print (app_code,location_code," query is duplicate of last")
-                    if within_last_query_window=='yes':
+                # Creating existing_query_list and duplicate_query variables now so that
+                # program doesn't fall over when we check whether the value is "yes" or
+                # "no" later. You'll see what these demark further on in the process.
+                # We could potentially deal with this by instead checking whether the
+                # variable exists further on but this seems more deliberate.
+                existing_query_list="no"
+                duplicate_query="no"
+
+                if "||" in most_recent_query:
+                    print (app_code,location_code," query list contains ||")
+                    most_recent_query_list=most_recent_query.split("||")
+                    existing_query_list="yes"
+                    print (app_code,location_code," query list split: ", most_recent_query_list)
+                    for x in most_recent_query_list:
+                        # The database will return up to 10 most recent queries
+                        if query==x:
+                            # If the current query is identical to the last query
+                            # then it's a sign that we've had a repeated request
+                            # from Slack
+                            print (app_code,location_code," query is duplicate of last")
+                            duplicate_query="yes"
+                else:
+                    print (app_code,location_code," query list doesn't contain ||")
+                    print (query,most_recent_query)
+                    if query==most_recent_query:
+                        print (app_code,location_code," query is duplicate of last")
+                        duplicate_query="yes"
+                    else:
+                        print (app_code,location_code," query not duplicate of last")
+
+
+                if within_last_query_window=='yes':
+                    if duplicate_query=="yes":
                         print (app_code,location_code," duplicate query shortly after last - shutting down")
 
                         close_db_connection(app_code,location_code)
@@ -576,6 +800,7 @@ def webhook():
                     #============  Database closed within if ==============#
                     #//////////////////////////////////////////////////////#
                     #------------------------------------------------------#
+
 
                         return make_response("Repeat message", 200)
                         #----- Process ended because repeat message -----#
@@ -592,9 +817,24 @@ def webhook():
                 location_code="4.2 genuine message"
                 print (app_code,location_code," not repeated query from Slack, saving latest query to prevent repeated action")
 
+                # Either adding the first query or adding the latest genuine query to the query list
+                # it's ok that we're saving the last ten because once two minutes has passed they won't
+                # affect operation but this prevents loops
+
+                if existing_query_list=="yes":
+                    last_nine_queries=most_recent_query_list[-1:]
+                    # Joining list elements into string (example here: https://stackoverflow.com/questions/12453580/concatenate-item-in-list-to-strings)
+                    new_query_list=("||".join(last_nine_queries))+query+"||"
+                    print (app_code,location_code," new query list is: ", new_query_list)
+
+                else:
+                    new_query_list=query+"||"
+                    print (app_code,location_code," new query list is: ", new_query_list)
+
+
                 # Using update_columns process to record most recent
                 # query for future checks
-                update_columns(app_code,location_code,['most_recent_user_query',query], user_id)
+                update_columns(app_code,location_code,['most_recent_user_query',new_query_list], user_id)
 
                 #Getting event_id from function argument
                 event_id=post_request.get("event_id")
@@ -751,12 +991,14 @@ def get_token(app_code,location_code):
 
     print (app_code,location_code,sublocation," done user_creator process")
 
+    speech_to_send='Hi, thanks for adding Nambot! If you ever want to add an order to the Vietnamese sheet just write that food in this channel or say "I want [food]" and I\'ll add it. For reference the sheet is located at: '+google_sheet_url
+
     #Sending message to slack which includes the defined speech from API.AI (thanks to https://api.slack.com/methods/chat.postMessage)
     params = (
     ('token', user_token),
     ('channel', channel),
-    ('text', 'Hi, thanks for adding Nambot! If you ever want to add an order to the Vietnamese sheet just write that food in this channel or say "I want to order [food]" and I\'ll add it. For reference the sheet is located at: https://docs.google.com/spreadsheets/d/1kyRxXtXBhZsJwPLNydQNgqU2o1hXRIJbOFqvgaLyTTU/edit#gid=0'),
-    ('username', 'nambot-the-third'),
+    ('text', speech_to_send),
+    ('username', 'vietnambot'),
     ('icon_emoji', ':ramen:'),
     ('pretty', '1'),
     )
@@ -1155,6 +1397,44 @@ def check_database(app_code,location_code,user_id, column):
 #--- End of G checking database for a value  ---#
 #
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+
+#===========================================================================================================================#
+#---------------------------------------------------------------------------------------------------------------------------#
+#===========================================================================================================================#
+
+#|||||||||||||||||||||||||||||||||||||||||||||||||||||||#
+#
+#--- H dealing with interactive button message  ---#
+# method for unpacking a message from an interactive button click
+# thanks to https://github.com/slackapi/python-message-menu-example/blob/master/example.py
+
+def button_message(app_code,location_code,request):
+    sublocation="H (interactive button)"
+
+     # Parse the request payload
+    form_json = json.loads(request.form["payload"])
+
+    print (app_code,location_code,sublocation," request is: ", form_json)
+
+    # Check to see what the user's selection was and update the message
+    selection=form_json.get('actions')[0].get('value')
+    print (app_code,location_code,sublocation," selection is: ", selection)
+
+    user_id=form_json.get('user').get('id')
+    print (app_code,location_code,sublocation," user is: ", user_id)
+
+    channel=form_json.get('channel').get('id')
+    print (app_code,location_code,sublocation," channel is: ", channel)
+
+    # By making our API.AI intent criteria match button names we can make this flexible for
+    # multiple button-types
+    query=selection
+
+    event_id="button_push"
+
+    tasks.send_to_api(event_id, user_id, channel, query)
+
+    return
 
 
 #===========================================================================================================================#

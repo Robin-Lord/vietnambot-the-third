@@ -55,7 +55,7 @@ from flask import Flask, make_response, request
 
 import gspread
 import oauth2client
-from datetime import datetime, time, date
+from datetime import datetime, time, date, timedelta
 from oauth2client.service_account import ServiceAccountCredentials
 import json
 
@@ -195,11 +195,17 @@ def send_to_api(event_id, user_id, channel, query):
     session_id=user_id
     print (app_code,location_code," received session_id: ", session_id)
 
-
-
     #|||||||||||||||||||||||||||||||||||||||||||||||||||||||#
     #
-    #--- w2 Check database for existing record data ---#
+    #--- w1.1 check to make sure the message we received isn't a duplicate of the last  ---#
+
+    # Finding out whether the current query is within two minutes of the last one
+    # (thanks to https://stackoverflow.com/questions/6205442/python-how-to-find-datetime-10-mins-after-current-time
+    # and https://stackoverflow.com/questions/10048249/how-do-i-determine-if-current-time-is-within-a-specified-range-using-pythons-da
+
+    location_code="w1.1 (deduplication)"
+
+    open_db_connection(app_code,location_code)
 
 
 #------------------------------------------------------#
@@ -208,11 +214,139 @@ def send_to_api(event_id, user_id, channel, query):
 #//////////////////////////////////////////////////////#
 #------------------------------------------------------#
 
-    location_code="w2 (check for record)"
+    # Checking our database to find the variables we save each time
+    # the last exact message received, the last action saved for a user_id
+    # and the last time we received a message from that user
+    most_recent_query=check_database(app_code,location_code,user_id, 'most_recent_user_query')
+    most_recent_action=check_database(app_code,location_code,user_id, 'most_recent_action_for_user')
+    last_query_time=check_database(app_code,location_code,user_id, 'most_recent_query_time')
 
-    # Using our open database process to start our database connaction
-    open_db_connection(app_code,location_code)
-    print (app_code,location_code,"database connection opened")
+    print (app_code,location_code,user_id," most recent query is ", most_recent_query)
+
+    # Retrieving the time it is now, then calculating what time
+    # it would have been two minutes ago
+    now = datetime.now()
+    print (app_code,location_code," now is ", now)
+
+    one_minute_ago=datetime.now()-timedelta(minutes=1)
+    print (app_code,location_code," two minutes ago is: ", one_minute_ago)
+
+
+
+    print (app_code,location_code,"updating columns")
+    # Using our update_columns process to put the time of THIS query
+    # in our database, so we can read it next time
+    update_columns(app_code,location_code,['most_recent_query_time',now], user_id)
+
+    # Creating existing_query_list and duplicate_query variables now so that
+    # program doesn't fall over when we check whether the value is "yes" or
+    # "no" later. You'll see what these demark further on in the process.
+    # We could potentially deal with this by instead checking whether the
+    # variable exists further on but this seems more deliberate.
+    within_last_query_window="no"
+    existing_query_list="no"
+    duplicate_query="no"
+
+    if "||" in most_recent_query:
+        # If there are no strings that contain the delimiters we
+        # add when we receive a message it is the first message
+        # so we don't need to worry about deduping
+        print (app_code,location_code," query list contains ||")
+        most_recent_query_list=most_recent_query.split("||")
+        existing_query_list="yes"
+        print (app_code,location_code," query list split: ", most_recent_query_list)
+        for x in most_recent_query_list:
+            # The database will return up to 3 most recent queries
+            if "--" in x:
+                print (app_code,location_code," query contains --")
+                query_pair=x.split("--")
+                past_query=query_pair[0]
+                print (app_code,location_code," query checking against is: ", past_query)
+                past_query_time_string=query_pair[1]
+                print (app_code,location_code," time checking against is: ", past_query_time_string)
+                # converting datestamp string into queryable timestamp thanks to https://stackoverflow.com/questions/12672629/python-how-to-convert-string-into-datetime
+                past_query_time_stamp=datetime.strptime(past_query_time_string, "%Y-%m-%d %H:%M:%S.%f")
+
+                print (app_code,location_code," time converted to timestamp is: ", past_query_time_stamp)
+                if one_minute_ago < past_query_time_stamp:
+                    # If less than two minutes have passed since
+                    # last query it's more likely to be duplicate
+                    print (app_code,location_code," less than one minute since last recorded action")
+                    within_last_query_window='yes'
+                    if query==past_query:
+                        # If the current query is identical to the last query
+                        # then it's a sign that we've had a repeated request
+                        # from Slack
+                        print (app_code,location_code," query is duplicate of last")
+                        duplicate_query="yes"
+                else:
+                    # If more than two minutes have passed we're
+                    # assuming it's not a repeated send from Slack
+                    # this allows a user to place exactly the same
+                    # order without having to worry about varying
+                    # their wording
+                    print (app_code,location_code," more than two minutes since last recorded action")
+    else:
+        print (app_code,location_code," query list doesn't contain ||")
+        print (app_code,location_code,"query is: ", query, " recalled query list is: ", most_recent_query)
+
+
+    if within_last_query_window=='yes':
+        if duplicate_query=="yes":
+            print (app_code,location_code," duplicate query shortly after last - shutting down")
+
+            close_db_connection(app_code,location_code)
+
+        #------------------------------------------------------#
+        #//////////////////////////////////////////////////////#
+        #============  Database closed within if ==============#
+        #//////////////////////////////////////////////////////#
+        #------------------------------------------------------#
+
+            return
+            #----- Process ended because repeat message -----#
+
+    #--- End of w1.1 check to make sure the message we received isn't a duplicate of the last ---#
+    #
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+
+    #|||||||||||||||||||||||||||||||||||||||||||||||||||||||#
+    #
+    #--- w1.2 Recording query as a recent genuine query  ---#
+
+    # This is for later deduplication
+
+    location_code="w1.2 (genuine message)"
+    print (app_code,location_code," not repeated query from Slack, saving latest query to prevent repeated action")
+
+    # Either adding the first query or adding the latest genuine query to the query list
+    # in this case, by and large, we can get away with this clumsy kind of deduplication because
+    # we are setting a short window
+
+    if existing_query_list=="yes":
+        last_two_queries=most_recent_query_list[-3:]
+        # Joining list elements into string (example here: https://stackoverflow.com/questions/12453580/concatenate-item-in-list-to-strings)
+        query_record=query+"--"+str(now)
+        new_query_list=("||".join(last_two_queries))+query_record+"||"
+        print (app_code,location_code," new query list is: ", new_query_list)
+
+    else:
+        query_record=query+"--"+str(now)
+        new_query_list=query_record+"||"
+        print (app_code,location_code," new query list is: ", new_query_list)
+
+
+    # Using update_columns process to record most recent
+    # query for future checks
+    update_columns(app_code,location_code,['most_recent_user_query',new_query_list], user_id)
+
+    #|||||||||||||||||||||||||||||||||||||||||||||||||||||||#
+    #
+    #--- w2 Check database for existing record data ---#
+
+
+
+    location_code="w2 (check for record)"
 
     # Retrieving any saved user name for the user id that we have been given by the main process
     user_name=check_database(app_code,location_code,user_id, "user_name")
@@ -910,11 +1044,70 @@ def send_to_api(event_id, user_id, channel, query):
     #
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 
+    #|||||||||||||||||||||||||||||||||||||||||||||||||||||||#
+    #
+    #--- W3.10 action is change-name  ---#
+    #
+
+    # Users may want to change the name that is used when they order,
+    # this is a simple process to update the name associated with a specific
+    # user ID
+
+
+    if action=="change-name":
+
+        location_code="w3.10 (change-name)"
+        print (app_code, location_code, " user wants to change name")
+        contexts = api_response_result.get ("contexts")
+        print (app_code,location_code," contexts are: ", contexts)
+        for context in contexts:
+            name=context.get("name")
+
+            # This request could come at any point, by selecting the context
+            # called "new-name" we should be able to manage the response quite
+            # easily, we also only currently accept requests of the form
+            # "change my name to [new-name]" so we have all the information at
+            # one time and don't need to worry about follow up questions or
+            # fallback intents
+            if name == "new-name":
+                print (app_code,location_code," new-name context: ", context)
+                parameters=context.get("parameters")
+                print (app_code,location_code," new-name parameters: ", parameters)
+                new_name=parameters.get("name")
+                print (app_code,location_code," new name is",new_name)
+
+        # Updating our database with the new name
+        update_columns(app_code,location_code,['user_name',new_name,'most_recent_user_channel',channel,'most_recent_user_session_id',user_id,'most_recent_action_for_user','change-name'],user_id)
+
+        # Confirming to the user that we made the change
+        speech_to_send="Ok, I've changed your name to "+new_name
+
+        print (app_code,location_code," message content: ", speech_to_send)
+        print (app_code,location_code," message user token: ", user_token)
+        print (app_code,location_code," message channel: ", channel)
+
+        # We already retrieved the user_token and channel higher up in the process
+        params = (
+        ('token', user_token),
+        ('channel', channel),
+        ('text', speech_to_send),
+        ('username', 'vietnambot'),
+        ('icon_emoji', ':rice:'),
+        ('pretty', '1'),
+        )
+        requests.get('https://slack.com/api/chat.postMessage', params=params)
+
+
+        return
+
+    #--- End of W3.10 action is change-name ---#
+    #
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+
 
 
 
     # Future plans:
-        # "change-name" function which will allow users to change the name that's recorded
         # "my usual" which will save a food as their usual order so that they can just recall that again in future
         # "todays-orders" which will allow getting the information about today's orders without having to go through the ordering process
 
@@ -923,9 +1116,9 @@ def send_to_api(event_id, user_id, channel, query):
 
     #|||||||||||||||||||||||||||||||||||||||||||||||||||||||#
     #
-    #--- W3.10 action is anything else  ---#
+    #--- W3.11 action is anything else  ---#
 
-    location_code="w3.10 (any-other-action)"
+    location_code="w3.11 (any-other-action)"
 
     # Because everything above this is an IF statement which ends in a "return" (ending the process)
     # we can treat all of that as closed off. Here we write code that executes if NONE of the above
@@ -950,7 +1143,7 @@ def send_to_api(event_id, user_id, channel, query):
 
     return
 
-    #--- End of W3.10 action is anything else ---#
+    #--- End of W3.11 action is anything else ---#
     #
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 

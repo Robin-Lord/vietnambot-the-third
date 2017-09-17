@@ -113,6 +113,7 @@
         # User says: I want [food] (etc.)
         # In context: None
         # Out context: food-followup
+        # Values: parameter: food, entity: sys.any, value:$food
         # Action: food
         # Event: None
         # Response (this is overwritten in our code but could also be created through API.AI): Ok [food] for [username], got it, I'll add that and let you know when we're done
@@ -215,6 +216,14 @@
         # Event: None
         # Response: Hi, I'm Vietnam bot, I can place your Vietnamese order in the shared Google sheet. Just say "I want " and then the food you want
 
+    # change-name:
+        # User says: I want to be called [name]
+        # In context: None
+        # Out context: new-name
+        # Action: change-name
+        # Values: parameter: name, entity: sys-any, value:$name
+        # Event: None
+        # Response: (overwritten by our code) Ok I'll do that
 
 
 
@@ -701,6 +710,12 @@ def webhook():
                 #--- End of 4.1.1 check to make sure bot doesn't respond to messages from bots ---#
                 #
                 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+                #|||||||||||||||||||||||||||||||||||||||||||||||||||||||#
+                #
+                #--- 4.2 getting information to direct response ---#
+
+
+                location_code="4.2 (getting info)"
 
 
                 # Getting the unique Slack user ID, we also use this
@@ -712,148 +727,6 @@ def webhook():
                 # Getting what user has said in the message
                 query=post_request_data.get("text")
                 print (app_code,location_code," query: ", query)
-
-
-
-                #|||||||||||||||||||||||||||||||||||||||||||||||||||||||#
-                #
-                #--- 4.1.2 check to make sure the message we received isn't a duplicate of the last  ---#
-
-                # Finding out whether the current query is within two minutes of the last one
-                # (thanks to https://stackoverflow.com/questions/6205442/python-how-to-find-datetime-10-mins-after-current-time
-                # and https://stackoverflow.com/questions/10048249/how-do-i-determine-if-current-time-is-within-a-specified-range-using-pythons-da
-
-                location_code="4.1.2 (deduplication)"
-
-                open_db_connection(app_code,location_code)
-
-
-#------------------------------------------------------#
-#//////////////////////////////////////////////////////#
-#============  Database connection open  ==============#
-#//////////////////////////////////////////////////////#
-#------------------------------------------------------#
-
-                # Checking our database to find the variables we save each time
-                # the last exact message received, the last action saved for a user_id
-                # and the last time we received a message from that user
-                most_recent_query=check_database(app_code,location_code,user_id, 'most_recent_user_query')
-                most_recent_action=check_database(app_code,location_code,user_id, 'most_recent_action_for_user')
-                last_query_time=check_database(app_code,location_code,user_id, 'most_recent_query_time')
-
-                print (app_code,location_code,user_id," most recent query is ", most_recent_query)
-
-                # Retrieving the time it is now, then calculating what time
-                # it would have been two minutes ago
-                now = datetime.now()
-                print (app_code,location_code," now is ", now)
-
-                two_minutes_ago=datetime.now()-timedelta(minutes=1)
-                print (app_code,location_code," two minutes ago is: ", two_minutes_ago)
-
-                # Catching error for if the user hasn't used the vietnambot
-                # in which case the last_query_time wouldn't exist
-                if last_query_time==None:
-                    print (app_code,location_code," first query or unable to call last query time")
-                else:
-                    # Checking whether more than two minutes have
-                    # passed since the last query
-                    if two_minutes_ago < last_query_time:
-                        # If less than two minutes have passed since
-                        # last query it's more likely to be duplicate
-                        print (app_code,location_code," less than two minutes since last recorded action")
-                        within_last_query_window='yes'
-                    else:
-                        # If more than two minutes have passed we're
-                        # assuming it's not a repeated send from Slack
-                        # this allows a user to place exactly the same
-                        # order without having to worry about varying
-                        # their wording
-                        print (app_code,location_code," more than two minutes since last recorded action")
-
-
-                print (app_code,location_code,"updating columns")
-                # Using our update_columns process to put the time of THIS query
-                # in our database, so we can read it next time
-                update_columns(app_code,location_code,['most_recent_query_time',now], user_id)
-
-                # Creating existing_query_list and duplicate_query variables now so that
-                # program doesn't fall over when we check whether the value is "yes" or
-                # "no" later. You'll see what these demark further on in the process.
-                # We could potentially deal with this by instead checking whether the
-                # variable exists further on but this seems more deliberate.
-                existing_query_list="no"
-                duplicate_query="no"
-
-                if "||" in most_recent_query:
-                    print (app_code,location_code," query list contains ||")
-                    most_recent_query_list=most_recent_query.split("||")
-                    existing_query_list="yes"
-                    print (app_code,location_code," query list split: ", most_recent_query_list)
-                    for x in most_recent_query_list:
-                        # The database will return up to 10 most recent queries
-                        if query==x:
-                            # If the current query is identical to the last query
-                            # then it's a sign that we've had a repeated request
-                            # from Slack
-                            print (app_code,location_code," query is duplicate of last")
-                            duplicate_query="yes"
-                else:
-                    print (app_code,location_code," query list doesn't contain ||")
-                    print (query,most_recent_query)
-                    if query==most_recent_query:
-                        print (app_code,location_code," query is duplicate of last")
-                        duplicate_query="yes"
-                    else:
-                        print (app_code,location_code," query not duplicate of last")
-
-
-                if within_last_query_window=='yes':
-                    if duplicate_query=="yes":
-                        print (app_code,location_code," duplicate query shortly after last - shutting down")
-
-                        close_db_connection(app_code,location_code)
-
-                    #------------------------------------------------------#
-                    #//////////////////////////////////////////////////////#
-                    #============  Database closed within if ==============#
-                    #//////////////////////////////////////////////////////#
-                    #------------------------------------------------------#
-
-
-                        return make_response("Repeat message", 200)
-                        #----- Process ended because repeat message -----#
-
-                #--- End of 4.1.2 check to make sure bot doesn't respond to messages from bots ---#
-                #
-                #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
-
-
-                #|||||||||||||||||||||||||||||||||||||||||||||||||||||||#
-                #
-                #--- 4.2 Getting location information to direct response  ---#
-
-                location_code="4.2 genuine message"
-                print (app_code,location_code," not repeated query from Slack, saving latest query to prevent repeated action")
-
-                # Either adding the first query or adding the latest genuine query to the query list
-                # it's ok that we're saving the last ten because once two minutes has passed they won't
-                # affect operation but this prevents loops
-
-                if existing_query_list=="yes":
-                    last_nine_queries=most_recent_query_list[-1:]
-                    # Joining list elements into string (example here: https://stackoverflow.com/questions/12453580/concatenate-item-in-list-to-strings)
-                    new_query_list=("||".join(last_nine_queries))+query+"||"
-                    print (app_code,location_code," new query list is: ", new_query_list)
-
-                else:
-                    new_query_list=query+"||"
-                    print (app_code,location_code," new query list is: ", new_query_list)
-
-
-                # Using update_columns process to record most recent
-                # query for future checks
-                update_columns(app_code,location_code,['most_recent_user_query',new_query_list], user_id)
 
                 #Getting event_id from function argument
                 event_id=post_request.get("event_id")
@@ -871,7 +744,7 @@ def webhook():
 
                 #|||||||||||||||||||||||||||||||||||||||||||||||||||||||#
                 #
-                #--- 4.3 Sending genuine message to asynchronous process  ---#
+                #--- 4.3 Sending message to asynchronous process (async will then check if it's duplicat) ---#
 
 
                 #Sending to async thanks https://devcenter.heroku.com/articles/celery-heroku
@@ -879,6 +752,8 @@ def webhook():
                 # and calculating information using the Google Sheets integration takes too long
                 # we are using asynchronous processing to manage our longer process so we can
                 # send Slack the "quick and confident" 200 response mentioned here: https://api.slack.com/events-api
+
+                location_code="4.3 (send async)"
 
                 print (app_code,location_code," sending to worker")
                 tasks.send_to_api(event_id, user_id, channel, query)
@@ -890,15 +765,6 @@ def webhook():
                 #|||||||||||||||||||||||||||||||||||||||||||||||||||||||#
                 #
                 #--- 4.4 make quick 200 response to Slack to confirm we've received the message to stop it sending again ---#
-
-                # Finally closing off database
-                close_db_connection(app_code,location_code)
-
-#------------------------------------------------------#
-#//////////////////////////////////////////////////////#
-#============  Database connection closed =============#
-#//////////////////////////////////////////////////////#
-#------------------------------------------------------#
 
 
                 #Sending quick response to Slack to confirm we have received the message
@@ -1010,7 +876,7 @@ def get_token(app_code,location_code):
 
     print (app_code,location_code,sublocation," done user_creator process")
 
-    speech_to_send='Hi, thanks for adding Nambot! If you ever want to add an order to the Vietnamese sheet just write that food in this channel or say "I want [food]" and I\'ll add it. For reference the sheet is located at: '+google_sheet_url
+    speech_to_send='Hi, thanks for adding Vietnambot! If you ever want to add an order to the Vietnamese sheet just write that food in this channel or say "I want [food]" and I\'ll add it. For reference the sheet is located at: '+google_sheet_url
 
     #Sending message to slack which includes the defined speech from API.AI (thanks to https://api.slack.com/methods/chat.postMessage)
     params = (

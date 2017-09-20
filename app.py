@@ -70,12 +70,9 @@
 # when we get these messages and discount the repeated calls.
 
 # The risk here is that the user might legitimately send us two identical responses
-# within two minutes, perhaps, for example, if they are responding to a few messages with "yes"
-# one solution is to remove this block and make our app respond to Slack faster to avoid it sending
-# the messages again (this could be done by paying for it to be constantly live, or by misusing a
-# free uptime checker to ping our app every half hour or so to keep it awake). The solution here is to
-# carefully manage the amount of time we're ignoring (two minutes should hopefully cover Slack resent
-# responses without discounting many repeated messages) and to control the times when users might send a
+# within a short time frame, perhaps, for example, if they are responding to a few messages with "yes"
+# . The solution here is to carefully manage the amount of time we're ignoring (a minute should hopefully
+# cover Slack resent responses without discounting many repeated messages) and to control the times when users might send a
 # duplicate response by using buttons in Slack. Some chat bots use buttons to help control the full conversational
 # flow but relying purely on buttons does devolve the conversation into essentially a pretty linear website journey
 
@@ -251,7 +248,7 @@
 
 # 2  Receive Slack challenge, respond (this allows the bot to receive notifications from Slack)
 
-# 3  Receive message posted in either private Slack channel or a public channel which the bot has been added to, check to ensure the message is not a repeated message by checking that it is not exactly the same as the last message while being within two minutes of the last message
+# 3  Receive message posted in either private Slack channel or a public channel which the bot has been added to, check to ensure the message is not a repeated message by checking that it is not exactly the same as the last message while being within a minute of the last message
 #    (this is to account for the fact that users might send the same message time after time if they want the same order)
 
 # 4  Check that message doesn't have a bot id - suggesting that it was sent by a bot (perhaps vietnambot) this is to avoid the program responding to itself
@@ -272,13 +269,13 @@
 
 # 12 Add values of date, user name, and order food to the first empty row
 
-# 13 Retrieve the current "top nammer" record for the team concerned (which is saved in the database from previous operations for speed of retrieval)
+# 13 Retrieve the current "top nommer" record for the team concerned (which is saved in the database from previous operations for speed of retrieval)
 
 # 14 Calculate the number of orders that have been placed today by filtering recent results to only those which match the current date
 
-# 15 Send appropriate follow-up message based on number of returned results matching minimum threshold and whether the current "top nammer" matches the one retrieved
+# 15 Send appropriate follow-up message based on number of returned results matching minimum threshold and whether the current "top nommer" matches the one retrieved
 
-# 16 Calulate the "top nammer" and update the database for quick retrieval in the next process
+# 16 Calulate the "top nommer" and update the database for quick retrieval in the next process
 
 
 #

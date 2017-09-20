@@ -219,24 +219,16 @@ def send_to_api(event_id, user_id, channel, query):
     # and the last time we received a message from that user
     most_recent_query=check_database(app_code,location_code,user_id, 'most_recent_user_query')
     most_recent_action=check_database(app_code,location_code,user_id, 'most_recent_action_for_user')
-    last_query_time=check_database(app_code,location_code,user_id, 'most_recent_query_time')
 
-    print (app_code,location_code,user_id," most recent query is ", most_recent_query)
+    print (app_code,location_code, user_id," most recent query is ", most_recent_query)
 
     # Retrieving the time it is now, then calculating what time
-    # it would have been two minutes ago
+    # it would have been one minute ago
     now = datetime.now()
     print (app_code,location_code," now is ", now)
 
     one_minute_ago=datetime.now()-timedelta(minutes=1)
-    print (app_code,location_code," two minutes ago is: ", one_minute_ago)
-
-
-
-    print (app_code,location_code,"updating columns")
-    # Using our update_columns process to put the time of THIS query
-    # in our database, so we can read it next time
-    update_columns(app_code,location_code,['most_recent_query_time',now], user_id)
+    print (app_code,location_code," one minute ago is: ", one_minute_ago)
 
     # Creating existing_query_list and duplicate_query variables now so that
     # program doesn't fall over when we check whether the value is "yes" or
@@ -255,21 +247,24 @@ def send_to_api(event_id, user_id, channel, query):
         most_recent_query_list=most_recent_query.split("||")
         existing_query_list="yes"
         print (app_code,location_code," query list split: ", most_recent_query_list)
+        list_position=0
         for x in most_recent_query_list:
-            # The database will return up to 3 most recent queries
+            # The database will return up to 10 most recent queries
             if "--" in x:
                 print (app_code,location_code," query contains --")
                 query_pair=x.split("--")
                 past_query=query_pair[0]
                 print (app_code,location_code," query checking against is: ", past_query)
+                print (app_code,location_code," query sent is: ", query)
                 past_query_time_string=query_pair[1]
                 print (app_code,location_code," time checking against is: ", past_query_time_string)
+                print (app_code,location_code," threshold is: ", one_minute_ago)
                 # converting datestamp string into queryable timestamp thanks to https://stackoverflow.com/questions/12672629/python-how-to-convert-string-into-datetime
                 past_query_time_stamp=datetime.strptime(past_query_time_string, "%Y-%m-%d %H:%M:%S.%f")
 
                 print (app_code,location_code," time converted to timestamp is: ", past_query_time_stamp)
                 if one_minute_ago < past_query_time_stamp:
-                    # If less than two minutes have passed since
+                    # If less than one minute have passed since
                     # last query it's more likely to be duplicate
                     print (app_code,location_code," less than one minute since last recorded action")
                     within_last_query_window='yes'
@@ -279,21 +274,77 @@ def send_to_api(event_id, user_id, channel, query):
                         # from Slack
                         print (app_code,location_code," query is duplicate of last")
                         duplicate_query="yes"
+                        # Here, regardless of whether the query is duplicate or not, we are updating
+                        # our list of recent queries with the current time, this should mean that duplicate
+                        # queries will always be removed (this is why we can keep the checked time period so short)
+                        # we run the next section to remove the last query and replace it with this most recent one
+                        if list_position==0:
+                            print (app_code,location_code," list position==0")
+                            # If the duplicate item is the first in the list then we replace that item
+                            previous_queries=most_recent_query_list[-15:]
+                            # Joining list elements into string (example here: https://stackoverflow.com/questions/12453580/concatenate-item-in-list-to-strings)
+                            query_record=query+"--"+str(now)
+                            new_query_list=query_record+"||"+("||".join(previous_queries))
+                            print (app_code,location_code," new query list is: ", new_query_list)
+                        else:
+                            print (app_code,location_code," list position!=0")
+                            # If the duplicate item is more than 0 we split the list to remove that item and
+                            # replace it with the new one
+                            query_record=query+"--"+str(now)
+                            pre_duplicate=list_position-1
+                            post_duplicate=len(most_recent_query_list)-(list_position+1)
+                            print (app_code,location_code," position is ", post_duplicate, "before end of list")
+                            previous_queries_pre=most_recent_query_list[0:pre_duplicate]
+                            print (app_code,location_code," items before are ", previous_queries_pre)
+                            previous_queries_post=most_recent_query_list[-post_duplicate:]
+                            print (app_code,location_code," items after are ", previous_queries_post)
+                            new_query_list=("||".join(previous_queries_pre))+"||"+query_record+"||"+("||".join(previous_queries_post))
+                            print (app_code,location_code," new query list is: ", new_query_list)
+                        # breaking out of for loop (thanks to https://www.tutorialspoint.com/python/python_break_statement.htm)
+                        break
+                    # We're using this to keep track of where we are in the list that we've saved
+                    # if the item matches all of our conditions as above it won't hit this block to
+                    # increase the value of list_position
+                    list_position=list_position+1
+
                 else:
-                    # If more than two minutes have passed we're
+                    # If more than one minute have passed we're
                     # assuming it's not a repeated send from Slack
                     # this allows a user to place exactly the same
                     # order without having to worry about varying
                     # their wording
-                    print (app_code,location_code," more than two minutes since last recorded action")
-    else:
+                    print (app_code,location_code," more than one minute since last recorded action")
+                    # We're using this to keep track of where we are in the list that we've saved
+                    # if the item matches all of our conditions as above it won't hit this block to
+                    # increase the value of list_position
+                    list_position=list_position+1
+
+    if existing_query_list!='yes':
         print (app_code,location_code," query list doesn't contain ||")
         print (app_code,location_code,"query is: ", query, " recalled query list is: ", most_recent_query)
+        query_record=query+"--"+str(now)
+        new_query_list=query_record+"||"
+    else:
+        if within_last_query_window!='yes' or duplicate_query!='yes':
+            print (app_code,location_code,"not a duplicate query")
+            # If EITHER there are no duplicate queries or the duplicate queries didn't occur within
+            # our window then we just drop the earliest item from our list and add the newest query
+            query_record=query+"--"+str(now)
+            # Joining list elements into string (example here: https://stackoverflow.com/questions/12453580/concatenate-item-in-list-to-strings)
+            new_query_list=("||".join(most_recent_query_list[1:15]))+"||"+query_record
+            print (app_code,location_code," new query list is: ", new_query_list)
+
+    if not new_query_list:
+        print (app_code,location_code,"there is a problem - new_query_list hasn't been defined")
+
+    # Using update_columns process to record most recent
+    # query for future checks
+    update_columns(app_code,location_code,['most_recent_user_query',new_query_list], user_id)
 
 
     if within_last_query_window=='yes':
         if duplicate_query=="yes":
-            print (app_code,location_code," duplicate query shortly after last - shutting down")
+            print (app_code,location_code," replaced duplicate query")
 
             close_db_connection(app_code,location_code)
 
@@ -306,39 +357,15 @@ def send_to_api(event_id, user_id, channel, query):
             return
             #----- Process ended because repeat message -----#
 
+
+
+    location_code="w1.2 (genuine message)"
+    print (app_code,location_code," recorded unique query")
+
     #--- End of w1.1 check to make sure the message we received isn't a duplicate of the last ---#
     #
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 
-    #|||||||||||||||||||||||||||||||||||||||||||||||||||||||#
-    #
-    #--- w1.2 Recording query as a recent genuine query  ---#
-
-    # This is for later deduplication
-
-    location_code="w1.2 (genuine message)"
-    print (app_code,location_code," not repeated query from Slack, saving latest query to prevent repeated action")
-
-    # Either adding the first query or adding the latest genuine query to the query list
-    # in this case, by and large, we can get away with this clumsy kind of deduplication because
-    # we are setting a short window
-
-    if existing_query_list=="yes":
-        last_two_queries=most_recent_query_list[-3:]
-        # Joining list elements into string (example here: https://stackoverflow.com/questions/12453580/concatenate-item-in-list-to-strings)
-        query_record=query+"--"+str(now)
-        new_query_list=("||".join(last_two_queries))+query_record+"||"
-        print (app_code,location_code," new query list is: ", new_query_list)
-
-    else:
-        query_record=query+"--"+str(now)
-        new_query_list=query_record+"||"
-        print (app_code,location_code," new query list is: ", new_query_list)
-
-
-    # Using update_columns process to record most recent
-    # query for future checks
-    update_columns(app_code,location_code,['most_recent_user_query',new_query_list], user_id)
 
     #|||||||||||||||||||||||||||||||||||||||||||||||||||||||#
     #
